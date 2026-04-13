@@ -1,3 +1,9 @@
+# Why another fork?
+This fork adds supports for external magnetometer via the secondary/slave I2C bus. Technically any I2C capable magnetometer is supported by just connect its SDA and SCL to BMI160's SDX and SCX.  
+Tested on:
+|magnetometer|mcu|example|
+|-|-|-|
+|QMC5883P|Raspberry Pi Pico|`examples/QMC5883P/`|
 # BMI160-Arduino
 
 This driver is for BMI160 6DoF sensor breakout boards which are connected through the Arduino SPI.

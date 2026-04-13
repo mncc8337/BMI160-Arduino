@@ -43,24 +43,36 @@ THE SOFTWARE.
 #define BMI160_ACC_PMU_STATUS_LEN   2
 #define BMI160_GYR_PMU_STATUS_BIT   2
 #define BMI160_GYR_PMU_STATUS_LEN   2
+#define BMI160_MAG_PMU_STATUS_BIT   0
+#define BMI160_MAG_PMU_STATUS_LEN   2
 
 #define BMI160_RA_PMU_STATUS        0x03
 
-#define BMI160_RA_GYRO_X_L          0x0C
-#define BMI160_RA_GYRO_X_H          0x0D
-#define BMI160_RA_GYRO_Y_L          0x0E
-#define BMI160_RA_GYRO_Y_H          0x0F
-#define BMI160_RA_GYRO_Z_L          0x10
-#define BMI160_RA_GYRO_Z_H          0x11
-#define BMI160_RA_ACCEL_X_L         0x12
-#define BMI160_RA_ACCEL_X_H         0x13
-#define BMI160_RA_ACCEL_Y_L         0x14
-#define BMI160_RA_ACCEL_Y_H         0x15
-#define BMI160_RA_ACCEL_Z_L         0x16
-#define BMI160_RA_ACCEL_Z_H         0x17
+#define BMI160_RA_MAG_X_L         0x04
+#define BMI160_RA_MAG_X_H         0x05
+#define BMI160_RA_MAG_Y_L         0x06
+#define BMI160_RA_MAG_Y_H         0x07
+#define BMI160_RA_MAG_Z_L         0x08
+#define BMI160_RA_MAG_Z_H         0x09
+// #define BMI160_RA_RHALL_L         0x0A
+// #define BMI160_RA_RHALL_H         0x0B
+#define BMI160_RA_GYR_X_L         0x0C
+#define BMI160_RA_GYR_X_H         0x0D
+#define BMI160_RA_GYR_Y_L         0x0E
+#define BMI160_RA_GYR_Y_H         0x0F
+#define BMI160_RA_GYR_Z_L         0x10
+#define BMI160_RA_GYR_Z_H         0x11
+#define BMI160_RA_ACC_X_L         0x12
+#define BMI160_RA_ACC_X_H         0x13
+#define BMI160_RA_ACC_Y_L         0x14
+#define BMI160_RA_ACC_Y_H         0x15
+#define BMI160_RA_ACC_Z_L         0x16
+#define BMI160_RA_ACC_Z_H         0x17
 
+#define BMI160_STATUS_MAG_MAN_OP    2
 #define BMI160_STATUS_FOC_RDY       3
 #define BMI160_STATUS_NVM_RDY       4
+#define BMI160_STATUS_DRDY_MAG      5
 #define BMI160_STATUS_DRDY_GYR      6
 #define BMI160_STATUS_DRDY_ACC      7
 
@@ -118,6 +130,7 @@ THE SOFTWARE.
 #define BMI160_RA_GYRO_RANGE        0X43
 
 #define BMI160_FIFO_HEADER_EN_BIT   4
+#define BMI160_FIFO_MAG_EN_BIT      5
 #define BMI160_FIFO_ACC_EN_BIT      6
 #define BMI160_FIFO_GYR_EN_BIT      7
 
@@ -254,15 +267,64 @@ THE SOFTWARE.
 #define BMI160_ACCEL_RANGE_SEL_BIT  0
 #define BMI160_ACCEL_RANGE_SEL_LEN  4
 
-#define BMI160_CMD_START_FOC        0x03
-#define BMI160_CMD_ACC_MODE_NORMAL  0x11
-#define BMI160_CMD_GYR_MODE_NORMAL  0x15
-#define BMI160_CMD_FIFO_FLUSH       0xB0
-#define BMI160_CMD_INT_RESET        0xB1
-#define BMI160_CMD_STEP_CNT_CLR     0xB2
-#define BMI160_CMD_SOFT_RESET       0xB6
+#define BMI160_CMD_START_FOC         0x03
+#define BMI160_CMD_ACC_MODE_SUSPEND  0x10
+#define BMI160_CMD_ACC_MODE_NORMAL   0x11
+#define BMI160_CMD_ACC_MODE_LOWPOWER 0x12
+#define BMI160_CMD_GYR_MODE_SUSPEND   0x14
+#define BMI160_CMD_GYR_MODE_NORMAL    0x15
+#define BMI160_CMD_GYR_MODE_FASTSTART 0x17
+#define BMI160_CMD_MAG_MODE_SUSPEND  0x18
+#define BMI160_CMD_MAG_MODE_NORMAL   0x19
+#define BMI160_CMD_MAG_MODE_LOWPOWER 0x1a
+#define BMI160_CMD_FIFO_FLUSH        0xB0
+#define BMI160_CMD_INT_RESET         0xB1
+#define BMI160_CMD_STEP_CNT_CLR      0xB2
+#define BMI160_CMD_SOFT_RESET        0xB6
 
 #define BMI160_RA_CMD               0x7E
+
+#define BMI160_RA_IF_CONF 0x6B
+
+#define BMI160_IF_MODE_BIT 4
+#define BMI160_IF_MODE_LEN 2
+
+#define BMI160_IF_AUTOCONFIG_NO_SECONDARY 0b00
+// #define BMI160_IF_I2C_OIS                 0b01
+#define BMI160_IF_AUTOCONFIG_MAGNETOMETER 0b10
+
+#define BMI160_RA_MAG_IF_0 0x4B
+#define BMI160_RA_MAG_IF_1 0x4C
+#define BMI160_RA_MAG_IF_2 0x4D
+#define BMI160_RA_MAG_IF_3 0x4E
+#define BMI160_RA_MAG_IF_4 0x4F
+
+#define BMI160_MAG_MANUAL_EN_BIT 7
+#define BMI160_MAG_MANUAL_EN_LEN 1
+#define BMI160_MAG_OFFSET_BIT 2
+#define BMI160_MAG_OFFSET_LEN 4
+#define BMI160_MAG_RD_BURST_BIT 0
+#define BMI160_MAG_RD_BURST_LEN 2
+
+#define BMI160_MAG_RD_BURST_1B 0b00
+#define BMI160_MAG_RD_BURST_2B 0b01
+#define BMI160_MAG_RD_BURST_6B 0b10
+#define BMI160_MAG_RD_BURST_8B 0b11
+
+#define BMI160_RA_MAG_CONF 0x44
+
+#define BMI160_MAG_ODR_BIT 0
+#define BMI160_MAG_ODR_LEN 4
+
+// choose a value so that when your magnetometer board
+// is rotated counter-clockwise by that angle,
+// the axes of it is identical to those in the BMI
+typedef enum {
+    BMI160_MAG_ROTATION_0 = 0,
+    BMI160_MAG_ROTATION_90,
+    BMI160_MAG_ROTATION_180,
+    BMI160_MAG_ROTATION_270,
+} BMI160MagRotation;
 
 /**
  * Interrupt Latch Mode options
@@ -470,6 +532,24 @@ class BMI160Class {
     public:
         void initialize();
         bool testConnection();
+        bool testMagConnection(uint8_t chip_id_reg, uint8_t expected_chip_id);
+
+        bool initializeMagnetometer(uint8_t i2c_address, uint8_t chip_id_reg, uint8_t expected_chip_id);
+        void waitTillDoneMagTrans();
+        void magSetupMode();
+        void magDataMode(uint8_t read_reg_addr, uint8_t write_reg_addr);
+        void writeMagRegister(uint8_t reg_addr, uint8_t data);
+        void triggerMagRegistersRead(uint8_t reg_addr, uint8_t rd_burst_code);
+        uint8_t getReadMagRegister(uint8_t pos);
+
+        void setMagRotation(BMI160MagRotation rot);
+        BMI160MagRotation getMagRotation();
+
+        uint8_t getMagDelay();
+        void setMagDelay(uint8_t mag_offset);
+
+        uint8_t getMagRate();
+        void setMagRate(uint8_t mag_odr);
 
         uint8_t getGyroRate();
         void setGyroRate(uint8_t rate);
@@ -574,6 +654,8 @@ class BMI160Class {
         void setGyroFIFOEnabled(bool enabled);
         bool getAccelFIFOEnabled();
         void setAccelFIFOEnabled(bool enabled);
+        bool getMagFIFOEnabled();
+        void setMagFIFOEnabled(bool enabled);
 
         bool getIntFIFOBufferFullEnabled();
         void setIntFIFOBufferFullEnabled(bool enabled);
@@ -594,7 +676,31 @@ class BMI160Class {
         bool getIntFIFOBufferFullStatus();
         bool getIntDataReadyStatus();
 
-        void getMotion6(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz);
+        void getMotion9(
+            int16_t* ax,
+            int16_t* ay,
+            int16_t* az,
+            int16_t* gx,
+            int16_t* gy,
+            int16_t* gz,
+            int16_t* mx,
+            int16_t* my,
+            int16_t* mz
+        );
+        void getMotion6(
+            int16_t* ax,
+            int16_t* ay,
+            int16_t* az,
+            int16_t* gx,
+            int16_t* gy,
+            int16_t* gz
+        );
+
+        void getMagneticField(int16_t* x, int16_t* y, int16_t* z);
+        int16_t getMagneticFieldX();
+        int16_t getMagneticFieldY();
+        int16_t getMagneticFieldZ();
+
         void getAcceleration(int16_t* x, int16_t* y, int16_t* z);
         int16_t getAccelerationX();
         int16_t getAccelerationY();
@@ -636,6 +742,7 @@ class BMI160Class {
         void getFIFOBytes(uint8_t *data, uint16_t length);
 
         uint8_t getDeviceID();
+        uint8_t getMagID(uint8_t chip_id_reg);
 
         uint8_t getRegister(uint8_t reg);
         void setRegister(uint8_t reg, uint8_t data);
@@ -654,6 +761,8 @@ class BMI160Class {
         virtual int serial_buffer_transfer(uint8_t *buf, unsigned tx_cnt, unsigned rx_cnt);
 
     private:
+        BMI160MagRotation mag_rotation = BMI160_MAG_ROTATION_0;
+        int16_t _getRawMagData(uint8_t reg);
         uint8_t reg_read (uint8_t reg);
         void reg_write(uint8_t reg, uint8_t data);
         void reg_write_bits(uint8_t reg, uint8_t data, unsigned pos, unsigned len);

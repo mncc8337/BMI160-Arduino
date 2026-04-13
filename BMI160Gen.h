@@ -3,6 +3,7 @@
 
 //#define BMI160GEN_USE_CURIEIMU
 #include "CurieIMU.h"
+#include "Wire.h"
 
 class BMI160GenClass : public CurieIMUClass {
     public:

@@ -80,6 +80,28 @@ uint8_t BMI160Class::reg_read_bits(uint8_t reg, unsigned pos, unsigned len)
 
 /******************************************************************************/
 
+static void apply_mag_rotation(BMI160MagRotation rot, int16_t *x, int16_t *y, int16_t *z, int16_t rx, int16_t ry, int16_t rz) {
+    *x = rz;
+    switch(rot) {
+        case BMI160_MAG_ROTATION_90:
+            *x = -ry;
+            *y = rx;
+            break;
+        case BMI160_MAG_ROTATION_180:
+            *x = -rx;
+            *y = -ry;
+            break;
+        case BMI160_MAG_ROTATION_270:
+            *x = ry;
+            *y = -rx;
+            break;
+        default:
+            *x = rx;
+            *y = ry;
+            break;
+    }
+}
+
 /** Power on and prepare for general usage.
  * This will activate the device and take it out of sleep mode (which must be done
  * after start-up). This function also sets both the accelerometer and the gyroscope
@@ -122,6 +144,246 @@ void BMI160Class::initialize()
     reg_write(BMI160_RA_INT_MAP_2, 0x00);
 }
 
+/** Initialize magnetometer
+* setting up necessary settings for the external magnetometer to work
+* note that users need to set up the slave device after calling this
+* then call magDoneSetup() to start measuring
+*/
+bool BMI160Class::initializeMagnetometer(uint8_t i2c_address, uint8_t chip_id_reg, uint8_t expected_chip_id) {
+    reg_write(BMI160_RA_CMD, BMI160_CMD_MAG_MODE_NORMAL);
+    
+#ifdef BMI160_MAGIC_PULLUP_SEQUENCE
+    // a block i found on https://github.com/EmotiBit/EmotiBit_BMI160/blob/master/BMI160.cpp
+    // that is supposed to "enable pull-up register" (resistors instead of register i think)
+    // well, haven't tested it, and you probably dont need it if your slave bus already has pullups
+    reg_write(BMI160_RA_FOC_CONF, 0x40);
+    reg_write(BMI160_RA_CMD, 0x37);
+    reg_write(BMI160_RA_CMD, 0x9A);
+    reg_write(BMI160_RA_CMD, 0xC0);
+    reg_write(0x7F, 0x90);
+    reg_write_bits(BMI160_RA_MAG_X_H, 2, 4, 2);
+    reg_write(0x7F, 0x80);
+#endif
+
+    while (0x1 != reg_read_bits(BMI160_RA_PMU_STATUS,
+                                BMI160_MAG_PMU_STATUS_BIT,
+                                BMI160_MAG_PMU_STATUS_LEN))
+        delay(1);
+
+    // setup interface (primary: autoconfig, secondary: magnetometer)
+    reg_write_bits(
+        BMI160_RA_IF_CONF,
+        BMI160_IF_AUTOCONFIG_MAGNETOMETER,
+        BMI160_IF_MODE_BIT,
+        BMI160_IF_MODE_LEN
+    );
+
+    // set i2c address and start manual mode
+    reg_write(BMI160_RA_MAG_IF_0, i2c_address << 1);
+    magSetupMode();
+
+    // check connection
+    return (getMagID(chip_id_reg) == expected_chip_id);
+}
+
+/** Wait for I2C slave transaction */
+void BMI160Class::waitTillDoneMagTrans() {
+    while(reg_read_bits(BMI160_RA_STATUS, BMI160_STATUS_MAG_MAN_OP, 1))
+        delay(1);
+}
+
+/** entering manual mode of slave i2c
+* this allow us to config the slave device indirectly
+*/
+void BMI160Class::magSetupMode() {
+    reg_write_bits(BMI160_RA_MAG_IF_1, 1, BMI160_MAG_MANUAL_EN_BIT, BMI160_MAG_MANUAL_EN_LEN);
+}
+
+/** entering auto mode
+* enable auto data polling mode, you cant send command to the slave after this
+* call magSetup() again to do it
+* note: burst length is always 8 bytes no matter what
+*/
+void BMI160Class::magDataMode(uint8_t read_reg_addr, uint8_t write_reg_addr) {
+    reg_write(BMI160_RA_MAG_IF_2, read_reg_addr);
+    reg_write(BMI160_RA_MAG_IF_3, write_reg_addr);
+    reg_write_bits(BMI160_RA_MAG_IF_1, 0, BMI160_MAG_MANUAL_EN_BIT, BMI160_MAG_MANUAL_EN_LEN);
+}
+
+void BMI160Class::setMagFIFOEnabled(bool enabled) {
+    reg_write_bits(BMI160_RA_FIFO_CONFIG_1, enabled, BMI160_FIFO_MAG_EN_BIT, 1);
+}
+
+bool BMI160Class::getMagFIFOEnabled() {
+    return reg_read_bits(BMI160_RA_FIFO_CONFIG_1, BMI160_FIFO_MAG_EN_BIT, 1);
+}
+
+/** set magnetometer's data request time offset since last request
+* the unit is in 2.5ms
+* so total time in milliseconds is mag_offset * 2.5 ms
+* @param mag_offset Value
+* @see getMagDelay()
+*/
+void BMI160Class::setMagDelay(uint8_t mag_offset) {
+    mag_offset &= 0b1111;
+    if(mag_offset > 0b1011) mag_offset = 0b1011; // max value according to the datasheet
+    reg_write_bits(BMI160_RA_MAG_IF_1, mag_offset, BMI160_MAG_OFFSET_BIT, BMI160_MAG_OFFSET_LEN);
+}
+
+/** get magnetometer's data request time offset since last request
+* @return raw value, multiply it with 2.5ms to get human readable result
+* @see setMagDelay()
+*/
+uint8_t BMI160Class::getMagDelay() {
+    return reg_read_bits(
+        BMI160_RA_MAG_IF_1,
+        BMI160_MAG_OFFSET_BIT,
+        BMI160_MAG_OFFSET_LEN
+    );
+}
+
+/** set output data rate of magnetometer
+* mag_odr is converted to Hz via this formula
+* 50/(2**(7 - mag_odr))
+* this can be optimized to
+* 25 << (mag_odr - 6) for mag_odr >= 6
+* else 25 << mag_odr / 64.0f
+* @param mag_odr Value
+* @see getMagODR()
+*/
+void BMI160Class::setMagRate(uint8_t mag_odr) {
+    mag_odr &= 0b1111;
+    reg_write_bits(BMI160_RA_MAG_CONF, mag_odr, BMI160_MAG_ODR_BIT, BMI160_MAG_ODR_LEN);
+}
+
+/** get output data rate of magnetometer
+*  to convert to Hz use this formula
+* 25 << (mag_odr - 6) for mag_odr >= 6
+* else 25 << mag_odr / 64.0f
+* @return raw value, use the formula above to convert
+* @see setMagODR()
+*/
+uint8_t BMI160Class::getMagRate() {
+    return reg_read_bits(BMI160_RA_MAG_CONF, BMI160_MAG_ODR_BIT, BMI160_MAG_ODR_LEN);
+}
+
+/** write to mag's register, duh */
+void BMI160Class::writeMagRegister(uint8_t reg_addr, uint8_t data) {
+    setRegister(BMI160_RA_MAG_IF_4, data);
+    delay(1);
+    setRegister(BMI160_RA_MAG_IF_3, reg_addr);
+    delay(1);
+    waitTillDoneMagTrans();
+}
+
+/** start registers read
+* trigger i2c burst read, data are stored on DATA register
+* @see getReadMagRegister
+*/
+void BMI160Class::triggerMagRegistersRead(uint8_t reg_addr, uint8_t rd_burst_code) {
+    reg_write_bits(
+        BMI160_RA_MAG_IF_1,
+        rd_burst_code,
+        BMI160_MAG_RD_BURST_BIT,
+        BMI160_MAG_RD_BURST_LEN
+    );
+    delay(1);
+    reg_write(BMI160_RA_MAG_IF_2, reg_addr);
+    delay(1);
+}
+
+/** get read values from the magnetometer
+* @param pos Data pos
+* @return register value at pos*/
+uint8_t BMI160Class::getReadMagRegister(uint8_t pos) {
+    return reg_read(BMI160_RA_MAG_X_L + pos);
+}
+
+void BMI160Class::setMagRotation(BMI160MagRotation rot) {
+    mag_rotation = rot;
+}
+
+BMI160MagRotation BMI160Class::getMagRotation() {
+    return mag_rotation;
+}
+
+void BMI160Class::getMagneticField(int16_t* x, int16_t* y, int16_t* z) {
+    uint8_t buffer[6];
+    buffer[0] = BMI160_RA_MAG_X_L;
+    serial_buffer_transfer(buffer, 1, 6);
+    int16_t raw_x = (((int16_t)buffer[1]) << 8) | buffer[0];
+    int16_t raw_y = (((int16_t)buffer[3]) << 8) | buffer[2];
+    int16_t raw_z = (((int16_t)buffer[5]) << 8) | buffer[4];
+    apply_mag_rotation(mag_rotation, x, y, z, raw_x, raw_y, raw_z);
+}
+
+int16_t BMI160Class::_getRawMagData(uint8_t reg) {
+    uint8_t buffer[2];
+    buffer[0] = reg;
+    serial_buffer_transfer(buffer, 1, 2);
+    return (((int16_t)buffer[1]) << 8) | buffer[0];
+}
+
+int16_t BMI160Class::getMagneticFieldX() {
+    switch(mag_rotation) {
+        case BMI160_MAG_ROTATION_90:  return -_getRawMagData(BMI160_RA_MAG_Y_L);
+        case BMI160_MAG_ROTATION_180: return -_getRawMagData(BMI160_RA_MAG_X_L);
+        case BMI160_MAG_ROTATION_270: return _getRawMagData(BMI160_RA_MAG_Y_L);
+        default:                      return _getRawMagData(BMI160_RA_MAG_X_L);
+    }
+}
+
+int16_t BMI160Class::getMagneticFieldY() {
+    switch(mag_rotation) {
+        case BMI160_MAG_ROTATION_90:  return _getRawMagData(BMI160_RA_MAG_X_L);
+        case BMI160_MAG_ROTATION_180: return -_getRawMagData(BMI160_RA_MAG_Y_L);
+        case BMI160_MAG_ROTATION_270: return -_getRawMagData(BMI160_RA_MAG_X_L);
+        default:                      return _getRawMagData(BMI160_RA_MAG_Y_L);
+    }
+}
+
+int16_t BMI160Class::getMagneticFieldZ() {
+    return _getRawMagData(BMI160_RA_MAG_Z_L);
+}
+
+/** Get raw 9-axis motion sensor readings (accel/gyro/magneto).
+ * Retrieves all currently available motion sensor values.
+ * @param ax 16-bit signed integer container for accelerometer X-axis value
+ * @param ay 16-bit signed integer container for accelerometer Y-axis value
+ * @param az 16-bit signed integer container for accelerometer Z-axis value
+ * @param gx 16-bit signed integer container for gyroscope X-axis value
+ * @param gy 16-bit signed integer container for gyroscope Y-axis value
+ * @param gz 16-bit signed integer container for gyroscope Z-axis value
+ * @param mx 16-bit signed integer container for magnetometer X-axis value
+ * @param my 16-bit signed integer container for magnetometer Y-axis value
+ * @param mz 16-bit signed integer container for magnetometer Z-axis value
+ */
+void BMI160Class::getMotion9(
+    int16_t* ax,
+    int16_t* ay,
+    int16_t* az,
+    int16_t* gx,
+    int16_t* gy,
+    int16_t* gz,
+    int16_t* mx,
+    int16_t* my,
+    int16_t* mz
+) {
+    uint8_t buffer[20];
+    buffer[0] = BMI160_RA_MAG_X_L;
+    serial_buffer_transfer(buffer, 1, 20);
+    int16_t rmx = (((int16_t)buffer[1]) << 8) | buffer[0];
+    int16_t rmy = (((int16_t)buffer[3]) << 8) | buffer[2];
+    int16_t rmz = (((int16_t)buffer[5]) << 8) | buffer[4];
+    apply_mag_rotation(mag_rotation, mx, my, mz, rmx, rmy, rmz);
+    *gx = (((int16_t)buffer[9]) << 8) | buffer[8];
+    *gy = (((int16_t)buffer[11]) << 8) | buffer[10];
+    *gz = (((int16_t)buffer[13]) << 8) | buffer[12];
+    *ax = (((int16_t)buffer[15]) << 8) | buffer[14];
+    *ay = (((int16_t)buffer[17]) << 8) | buffer[16];
+    *az = (((int16_t)buffer[19]) << 8) | buffer[18];					
+}
+
 /** Get Device ID.
  * This register is used to verify the identity of the device (0b11010001, 0xD1).
  * @return Device ID (should be 0xD1)
@@ -131,6 +393,15 @@ uint8_t BMI160Class::getDeviceID() {
     return reg_read(BMI160_RA_CHIP_ID);
 }
 
+/** get magnetometer chip id
+* @return read chip id
+*/
+uint8_t BMI160Class::getMagID(uint8_t chip_id_reg) {
+    triggerMagRegistersRead(chip_id_reg, BMI160_MAG_RD_BURST_1B);
+    waitTillDoneMagTrans();
+    return getReadMagRegister(0);
+}
+
 /** Verify the SPI connection.
  * Make sure the device is connected and responds as expected.
  * @return True if connection is valid, false otherwise
@@ -138,6 +409,14 @@ uint8_t BMI160Class::getDeviceID() {
 bool BMI160Class::testConnection()
 {
     return (BMI160_CHIP_ID == getDeviceID());
+}
+
+/** verify magnetometer connection
+* @param expected_chip_id Self explanatory
+* @return true if ok, else false
+*/
+bool BMI160Class::testMagConnection(uint8_t chip_id_reg, uint8_t expected_chip_id) {
+    return (expected_chip_id == getMagID(chip_id_reg));
 }
 
 /** Get gyroscope output data rate.
@@ -2175,7 +2454,7 @@ void BMI160Class::setIntEnabled(bool enabled) {
  */
 void BMI160Class::getMotion6(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz) {
     uint8_t buffer[12];
-    buffer[0] = BMI160_RA_GYRO_X_L;
+    buffer[0] = BMI160_RA_GYR_X_L;
     serial_buffer_transfer(buffer, 1, 12);
     *gx = (((int16_t)buffer[1])  << 8) | buffer[0];
     *gy = (((int16_t)buffer[3])  << 8) | buffer[2];
@@ -2223,7 +2502,7 @@ void BMI160Class::getMotion6(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx,
  */
 void BMI160Class::getAcceleration(int16_t* x, int16_t* y, int16_t* z) {
     uint8_t buffer[6];
-    buffer[0] = BMI160_RA_ACCEL_X_L;
+    buffer[0] = BMI160_RA_ACC_X_L;
     serial_buffer_transfer(buffer, 1, 6);
     *x = (((int16_t)buffer[1]) << 8) | buffer[0];
     *y = (((int16_t)buffer[3]) << 8) | buffer[2];
@@ -2237,7 +2516,7 @@ void BMI160Class::getAcceleration(int16_t* x, int16_t* y, int16_t* z) {
  */
 int16_t BMI160Class::getAccelerationX() {
     uint8_t buffer[2];
-    buffer[0] = BMI160_RA_ACCEL_X_L;
+    buffer[0] = BMI160_RA_ACC_X_L;
     serial_buffer_transfer(buffer, 1, 2);
     return (((int16_t)buffer[1]) << 8) | buffer[0];
 }
@@ -2249,7 +2528,7 @@ int16_t BMI160Class::getAccelerationX() {
  */
 int16_t BMI160Class::getAccelerationY() {
     uint8_t buffer[2];
-    buffer[0] = BMI160_RA_ACCEL_Y_L;
+    buffer[0] = BMI160_RA_ACC_Y_L;
     serial_buffer_transfer(buffer, 1, 2);
     return (((int16_t)buffer[1]) << 8) | buffer[0];
 }
@@ -2261,7 +2540,7 @@ int16_t BMI160Class::getAccelerationY() {
  */
 int16_t BMI160Class::getAccelerationZ() {
     uint8_t buffer[2];
-    buffer[0] = BMI160_RA_ACCEL_Z_L;
+    buffer[0] = BMI160_RA_ACC_Z_L;
     serial_buffer_transfer(buffer, 1, 2);
     return (((int16_t)buffer[1]) << 8) | buffer[0];
 }
@@ -2325,7 +2604,7 @@ int16_t BMI160Class::getTemperature() {
  */
 void BMI160Class::getRotation(int16_t* x, int16_t* y, int16_t* z) {
     uint8_t buffer[6];
-    buffer[0] = BMI160_RA_GYRO_X_L;
+    buffer[0] = BMI160_RA_GYR_X_L;
     serial_buffer_transfer(buffer, 1, 6);
     *x = (((int16_t)buffer[1]) << 8) | buffer[0];
     *y = (((int16_t)buffer[3]) << 8) | buffer[2];
@@ -2339,7 +2618,7 @@ void BMI160Class::getRotation(int16_t* x, int16_t* y, int16_t* z) {
  */
 int16_t BMI160Class::getRotationX() {
     uint8_t buffer[2];
-    buffer[0] = BMI160_RA_GYRO_X_L;
+    buffer[0] = BMI160_RA_GYR_X_L;
     serial_buffer_transfer(buffer, 1, 2);
     return (((int16_t)buffer[1]) << 8) | buffer[0];
 }
@@ -2351,7 +2630,7 @@ int16_t BMI160Class::getRotationX() {
  */
 int16_t BMI160Class::getRotationY() {
     uint8_t buffer[2];
-    buffer[0] = BMI160_RA_GYRO_Y_L;
+    buffer[0] = BMI160_RA_GYR_Y_L;
     serial_buffer_transfer(buffer, 1, 2);
     return (((int16_t)buffer[1]) << 8) | buffer[0];
 }
@@ -2363,7 +2642,7 @@ int16_t BMI160Class::getRotationY() {
  */
 int16_t BMI160Class::getRotationZ() {
     uint8_t buffer[2];
-    buffer[0] = BMI160_RA_GYRO_Z_L;
+    buffer[0] = BMI160_RA_GYR_Z_L;
     serial_buffer_transfer(buffer, 1, 2);
     return (((int16_t)buffer[1]) << 8) | buffer[0];
 }

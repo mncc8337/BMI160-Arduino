@@ -24,6 +24,15 @@ bool BMI160GenClass::begin(Mode mode, const int arg1, const int arg2)
     default:
         return false;
     }
+
+    // make sure the sensor exists before continuing
+    // only support I2C
+    if(mode == I2C_MODE) {
+        Wire.beginTransmission(i2c_addr);
+        if(Wire.endTransmission() != 0)
+            return false;
+    }
+
     if (0 <= arg2) {
         interrupt_pin = digitalPinToInterrupt(arg2);
 #ifdef DEBUG
