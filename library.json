@@ -1,0 +1,29 @@
+{
+  "name": "BMI160-Arduino-Extended",
+  "version": "1.0.0", 
+  "description": "Fork of hanyazou's BMI160-Arduino library, modified to support external magnetometers on the secondary I2C bus.",
+  "keywords": [
+    "sensor",
+    "accelerometer",
+    "gyroscope",
+    "magnetometer",
+    "imu",
+    "bmi160"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mncc8337/BMI160-Arduino.git"
+  },
+  "authors": [
+    {
+      "name": "Hanyazou"
+    },
+    {
+      "name": "mncc8337",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "*"
+}
