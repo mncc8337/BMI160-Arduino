@@ -54,11 +54,11 @@ void setup() {
     // since the QMC5883P is on continuous mode, we dont need to set the command write register
     // so we set it to a readonly register like 0x00 so it dont mess with the automatic
     // data poll process
-    BMI160.magDataMo€ý.de(0x01, 0x00);
+    BMI160.magDataMode(0x01, 0x00);
 }
 
 void loop() {
-    // we dont need to trigger a read request, because the BMI is€ý. already do it for us
+    // we dont need to trigger a read request, because the BMI is already do it for us
     // read 6 bytes. start from 0x01 register (first data byte)
 
     int16_t magX, magY, magZ;

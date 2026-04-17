@@ -81,7 +81,7 @@ uint8_t BMI160Class::reg_read_bits(uint8_t reg, unsigned pos, unsigned len)
 /******************************************************************************/
 
 static void apply_mag_rotation(BMI160MagRotation rot, int16_t *x, int16_t *y, int16_t *z, int16_t rx, int16_t ry, int16_t rz) {
-    *x = rz;
+    *z = rz;
     switch(rot) {
         case BMI160_MAG_ROTATION_90:
             *x = -ry;
