@@ -18,7 +18,7 @@
  */
 
 #include "CurieIMU.h"
-#include "internal/ss_spi.h"
+#include "ss_spi.h"
 #if defined(BMI160GEN_USE_CURIEIMU)
 #include "interrupt.h"
 #else
